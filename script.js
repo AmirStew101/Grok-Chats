@@ -51,8 +51,18 @@ document.addEventListener('DOMContentLoaded', () => {
             messagesDiv.innerHTML = '';
             messages.forEach(msg => {
                 const p = document.createElement('p');
-                p.textContent = `${msg.role}: ${msg.content}`;
-                messagesDiv.appendChild(p);
+                if (msg.role === 'user') {
+                    p.innerHTML = `${msg.role}: ${msg.content}`;
+                    messagesDiv.appendChild(p);
+                }
+                else {
+                    p.innerHTML = `${msg.role}:`;
+                    messagesDiv.appendChild(p);
+                    const content = get_split_message(msg.content);
+                    content.forEach(c => {
+                        messagesDiv.appendChild(c);
+                    });
+                }
             });
             // Scroll to the bottom of the messages div
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
@@ -60,6 +70,22 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error(error);
             messagesDiv.innerHTML = `<p>Error loading messages for ${chat}.</p>`;
         }
+    }
+
+    function get_split_message(message) {
+        var messageDivs = [];
+        const content_split = message.split("###");
+        for (let ii = 0; ii < content_split.length; ii++) {
+            if (content_split[ii] == "") {
+                continue;
+            }
+            else if (ii > 1) {
+                messageDivs.push(document.createElement("br"));
+                messageDivs.push(document.createElement("br"));
+            }
+            messageDivs.push(document.createTextNode(content_split[ii]));
+        }
+        return messageDivs;
     }
 
     /**
@@ -72,12 +98,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!content || !currentChat) {
             return;
         }
-
         const message = {
             role: 'user',
             content: "Tell a revenge story about " + content
         };
-
         try {
             // Send the new message to the server
             const response = await fetch(`/api/chats/${currentChat}`, {
@@ -87,11 +111,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 },
                 body: JSON.stringify(message)
             });
-
             if (!response.ok) {
                 throw new Error('Failed to send message');
             }
-
             messageInput.value = '';
             // Optimistically add the user's message to the UI
             const p = document.createElement('p');
@@ -102,11 +124,14 @@ document.addEventListener('DOMContentLoaded', () => {
             // Wait for the bot's response and add it to the UI
             const botMessage = await response.json();
             const pBot = document.createElement('p');
-            pBot.textContent = `${botMessage.role}: ${botMessage.content}`;
+            pBot.innerHTML = `${botMessage.role}:`;
             messagesDiv.appendChild(pBot);
+            
+            const content = get_split_message(botMessage.content);
+            content.forEach(c => {
+                messagesDiv.appendChild(c);
+            });
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
-
-
         } catch (error) {
             console.error(error);
             // Optionally, display an error message in the UI

@@ -6,3 +6,4 @@ reddit_scraper.py
 .env
 venv
 __pycache__
+story_seperator.py
