@@ -1,10 +1,131 @@
-import os, json
+import os, json, sqlite3, glob
 from dotenv import load_dotenv
 from xai_sdk import Client
 from xai_sdk.chat import user, system, assistant
 
 # Load environment variables from .env file
 load_dotenv()
+
+# This class handles all database operations using SQLite
+class Database:
+    DB_NAME = 'chat_history.db'
+
+    # This function establishes a connection to the SQLite database
+    def get_db_connection(self):
+        conn = sqlite3.connect(self.DB_NAME)
+        conn.row_factory = sqlite3.Row
+        return conn
+    
+    # This function initializes the database and creates necessary tables
+    def init_db(self):
+        conn = self.get_db_connection()
+        c = conn.cursor()
+        # Create personalities table
+        # We are ignoring the 'liked' column in personalities if it exists, as it's no longer used.
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS personalities (
+                name TEXT PRIMARY KEY,
+                liked INTEGER DEFAULT 0
+            )
+        ''')
+        # Create messages table
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                personality_name TEXT,
+                input TEXT,
+                response TEXT,
+                liked INTEGER DEFAULT 0,
+                FOREIGN KEY(personality_name) REFERENCES personalities(name)
+            )
+        ''')
+        
+        # Attempt to add 'liked' column to messages if it doesn't exist (migration)
+        try:
+            c.execute('ALTER TABLE messages ADD COLUMN liked INTEGER DEFAULT 0')
+        except sqlite3.OperationalError:
+            pass
+
+        conn.commit()
+        conn.close()
+    
+    # This function migrates existing JSON chat history files to the SQLite database
+    def migrate_from_json(self):
+        # Ensure all defined personalities exist in DB
+        conn = self.get_db_connection()
+        c = conn.cursor()
+        for name in PERSONALITIES:
+            c.execute('INSERT OR IGNORE INTO personalities (name) VALUES (?)', (name,))
+        conn.commit()
+        
+        # Migrate JSON files
+        json_files = glob.glob('*_chat.json')
+        for file_path in json_files:
+            chat_name = os.path.splitext(os.path.basename(file_path))[0].replace('_chat', '')
+            
+            # Ensure personality exists
+            c.execute('INSERT OR IGNORE INTO personalities (name) VALUES (?)', (chat_name,))
+            
+            with open(file_path, 'r') as f:
+                try:
+                    history = json.load(f)
+                    for item in history:
+                        c.execute('INSERT INTO messages (personality_name, input, response) VALUES (?, ?, ?)',
+                                (chat_name, item['input'], item['response']))
+                except json.JSONDecodeError:
+                    print(f"Error reading {file_path}")
+            
+            conn.commit()
+            # Rename processed file
+            os.rename(file_path, file_path + '.bak')
+        
+        conn.close()
+
+    # This function returns the chat history for a given chat name
+    def get_chat_history(self, chat_name):
+        conn = self.get_db_connection()
+        c = conn.cursor()
+        c.execute('SELECT id, input, response, liked FROM messages WHERE personality_name = ?', (chat_name,))
+        rows = c.fetchall()
+        conn.close()
+        return [{'id': row['id'], 'input': row['input'], 'response': row['response'], 'liked': bool(row['liked'])} for row in rows]
+    
+    # This function returns a list of all chat names
+    def get_all_chats(self):
+        conn = self.get_db_connection()
+        c = conn.cursor()
+        c.execute('SELECT name FROM personalities')
+        rows = c.fetchall()
+        conn.close()
+        return [{'name': row['name']} for row in rows]
+    
+    # This function toggles the liked status of a message
+    def toggle_message_like(self, message_id):
+        conn = self.get_db_connection()
+        c = conn.cursor()
+        c.execute('SELECT liked FROM messages WHERE id = ?', (message_id,))
+        row = c.fetchone()
+        if row:
+            new_liked = 0 if row['liked'] else 1
+            c.execute('UPDATE messages SET liked = ? WHERE id = ?', (new_liked, message_id))
+            conn.commit()
+            conn.close()
+            return bool(new_liked)
+        conn.close()
+        return False
+    
+    # This function saves a message to the corresponding chat file
+    def save_message(self, chat_name, message):
+        conn = self.get_db_connection()
+        c = conn.cursor()
+        # Ensure personality exists
+        c.execute('INSERT OR IGNORE INTO personalities (name) VALUES (?)', (chat_name,))
+        c.execute('INSERT INTO messages (personality_name, input, response) VALUES (?, ?, ?)',
+                (chat_name, message["input"], message["response"]))
+        new_id = c.lastrowid
+        conn.commit()
+        conn.close()
+        return new_id
 
 # This class is a wrapper around the xai_sdk.Client to interact with the Grok API
 class GrokChat:
@@ -53,11 +174,13 @@ class GrokChat:
     def create_new_chat(self):
         return self.client.chat.create(model=self.model)
 
+db = Database()
+
 # The personality prompts
 PERSONALITIES = {
-    "daniel": "You are Daniel, a middle aged man who is knowledgeable, smart, and has a fun personality. Your revenge stories are focused more on real life or in person revenge.",
-    "harry": "You are Harry, a young adult man who is a streamer who is knowledgeable, smart, enthusiastic, and curious. Your revenge stories are focused more on online internet revenge.",
-    "jessica": "You are Jessica, a middle aged female who is caring, empathetic, a good listener and provide thoughtful responses. Your revenge stories are focused more on real life or in person revenge."
+    "daniel": os.environ.get('PERSONALITY_DANIEL', "You are Daniel, a middle aged man who is knowledgeable, smart, and has a fun personality."), 
+    "harry": os.environ.get('PERSONALITY_HARRY', "You are Harry, a young adult man who is a streamer who is knowledgeable, smart, enthusiastic, and curious."),
+    "jessica": os.environ.get('PERSONALITY_JESSICA', "You are Jessica, a middle aged female who is caring, empathetic, a good listener and provide thoughtful responses.")
 }
 
 # The source to guide each personalities information and how it will give responses.
@@ -70,14 +193,15 @@ if personality_source == None:
 def get_grok_response(chat_name, user_input):
     chat_name = chat_name.lower()
     if chat_name not in PERSONALITIES:
-        raise ValueError(f"Unknown personality: {chat_name}")
+        # It might be a custom chat not in the hardcoded list, check DB or raise
+        # For now, sticking to logic that requires it to be in PERSONALITIES or we rely on DB existence?
+        # The original code checked PERSONALITIES. Let's keep that check but also support if it's in DB?
+        # Actually, original code raised ValueError.
+        if chat_name not in PERSONALITIES:
+             raise ValueError(f"Unknown personality: {chat_name}")
     
-    # Load the chat history from the corresponding json file
-    file_path = f"{chat_name}_chat.json"
-    history = []
-    if os.path.exists(file_path):
-        with open(file_path, 'r') as f:
-            history = json.load(f)
+    # Load the chat history from DB
+    history = db.get_chat_history(chat_name)
 
     # Create a new GrokChat instance, load the history, and get a response
     grok_chat = GrokChat()
@@ -86,14 +210,9 @@ def get_grok_response(chat_name, user_input):
     
     return grok_chat.user_talk(user_input)
 
-# This function saves a message to the corresponding chat file
-def save_message(chat_name, message):
-    file_path = f"{chat_name}_chat.json"
-    history = []
-    if os.path.exists(file_path):
-        with open(file_path, 'r') as f:
-            history = json.load(f)
-    
-    history.append({"input": message["input"], "response": message["response"]})
-    with open(file_path, 'w') as f:
-        json.dump(history, f, indent=2)
+
+# Initialize DB and migrate on module load (or call explicitly from app.py)
+# Better to call explicitly to avoid side effects on import, but for simplicity/script nature:
+if __name__ == "__main__":
+    db.init_db()
+    db.migrate_from_json()

@@ -7,3 +7,4 @@ reddit_scraper.py
 venv
 __pycache__
 story_seperator.py
+chat_history.db

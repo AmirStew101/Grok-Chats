@@ -22,19 +22,67 @@ document.addEventListener('DOMContentLoaded', () => {
             chatSelector.innerHTML = '';
             chats.forEach(chat => {
                 const option = document.createElement('option');
-                option.value = chat;
-                option.textContent = chat;
+                option.value = chat.name;
+                option.textContent = chat.name;
                 chatSelector.appendChild(option);
             });
             // If there are any chats, load the first one by default
             if (chats.length > 0) {
-                currentChat = chats[0];
+                currentChat = chats[0].name;
                 loadMessages(currentChat);
             }
         } catch (error) {
             console.error(error);
             messagesDiv.innerHTML = '<p>Error loading chats.</p>';
         }
+    }
+
+    function createMessageElement(msg) {
+        const container = document.createElement('div');
+        container.style.marginBottom = '10px';
+        
+        const p = document.createElement('p');
+        p.style.margin = '0';
+        
+        if (msg.role === 'user') {
+            p.innerHTML = `<strong>${msg.role}:</strong> ${msg.content}`;
+            container.appendChild(p);
+        } else {
+            // Assistant message
+            const header = document.createElement('div');
+            header.style.display = 'flex';
+            header.style.alignItems = 'center';
+            header.style.gap = '10px';
+
+            const roleTitle = document.createElement('strong');
+            roleTitle.textContent = `${msg.role}:`;
+            header.appendChild(roleTitle);
+
+            // Heart icon
+            const heart = document.createElement('span');
+            heart.textContent = msg.liked ? '❤️' : '♡';
+            heart.style.cursor = 'pointer';
+            heart.style.userSelect = 'none';
+            heart.onclick = async () => {
+                try {
+                    const response = await fetch(`/api/messages/${msg.id}/like`, { method: 'POST' });
+                    if (response.ok) {
+                        const data = await response.json();
+                        heart.textContent = data.liked ? '❤️' : '♡';
+                    }
+                } catch (err) {
+                    console.error('Error toggling like', err);
+                }
+            };
+            header.appendChild(heart);
+            container.appendChild(header);
+
+            const contentDiv = document.createElement('div');
+            const contentParts = get_split_message(msg.content);
+            contentParts.forEach(c => contentDiv.appendChild(c));
+            container.appendChild(contentDiv);
+        }
+        return container;
     }
 
     /**
@@ -50,19 +98,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const messages = await response.json();
             messagesDiv.innerHTML = '';
             messages.forEach(msg => {
-                const p = document.createElement('p');
-                if (msg.role === 'user') {
-                    p.innerHTML = `${msg.role}: ${msg.content}`;
-                    messagesDiv.appendChild(p);
-                }
-                else {
-                    p.innerHTML = `${msg.role}:`;
-                    messagesDiv.appendChild(p);
-                    const content = get_split_message(msg.content);
-                    content.forEach(c => {
-                        messagesDiv.appendChild(c);
-                    });
-                }
+                messagesDiv.appendChild(createMessageElement(msg));
             });
             // Scroll to the bottom of the messages div
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
@@ -115,22 +151,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error('Failed to send message');
             }
             messageInput.value = '';
-            // Optimistically add the user's message to the UI
-            const p = document.createElement('p');
-            p.textContent = `${message.role}: ${message.content}`;
-            messagesDiv.appendChild(p);
+            
+            // Add user message immediately (optimistic update not fully possible without ID but we can just render text)
+            // Actually, we can just fetch the response and append both.
+            // But let's follow existing pattern: User msg first, then wait for bot.
+            // Since we use createMessageElement, we can construct a temp object for user.
+            messagesDiv.appendChild(createMessageElement({ role: 'user', content: message.content }));
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
 
             // Wait for the bot's response and add it to the UI
             const botMessage = await response.json();
-            const pBot = document.createElement('p');
-            pBot.innerHTML = `${botMessage.role}:`;
-            messagesDiv.appendChild(pBot);
-            
-            const content = get_split_message(botMessage.content);
-            content.forEach(c => {
-                messagesDiv.appendChild(c);
-            });
+            messagesDiv.appendChild(createMessageElement(botMessage));
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         } catch (error) {
             console.error(error);
