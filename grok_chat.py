@@ -194,7 +194,7 @@ PERSONALITIES = {
 }
 
 # The source to guide each personalities information and how it will give responses.
-personality_source = os.environ.get('PERSONALITY_SOURCE')
+personality_source = os.environ.get('PERSONALITY_SOURCE', "You tell entertaining and captivating stories. Don't mention your age, AI nature, or say these are real stories. Always use engaging and descriptive language to captivate the audience that matches your personality.")
 if personality_source == None:
     raise KeyError("PERSONALITY_SOURCE environment variable not set")
 
