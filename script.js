@@ -61,6 +61,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Heart icon
             const heart = document.createElement('span');
             heart.textContent = msg.liked ? '❤️' : '♡';
+            heart.style.fontSize = '1.25em';
             heart.style.cursor = 'pointer';
             heart.style.userSelect = 'none';
             heart.onclick = async () => {
