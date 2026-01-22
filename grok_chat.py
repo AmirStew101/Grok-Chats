@@ -114,6 +114,16 @@ class Database:
         conn.close()
         return False
     
+    # This function updates the content of a message
+    def update_message_content(self, message_id, new_content):
+        conn = self.get_db_connection()
+        c = conn.cursor()
+        c.execute('UPDATE messages SET response = ? WHERE id = ?', (new_content, message_id))
+        conn.commit()
+        updated = c.rowcount > 0
+        conn.close()
+        return updated
+
     # This function saves a message to the corresponding chat file
     def save_message(self, chat_name, message):
         conn = self.get_db_connection()

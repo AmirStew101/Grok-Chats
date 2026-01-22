@@ -38,6 +38,22 @@ async def like_message(request):
     except ValueError:
         return web.Response(status=400, text="Invalid message ID")
 
+# API endpoint to update a message content.
+async def update_message(request):
+    try:
+        message_id = int(request.match_info['message_id'])
+        data = await request.json()
+        new_content = data.get('content')
+        if new_content is None:
+            return web.Response(status=400, text="Missing content")
+        
+        if db.update_message_content(message_id, new_content):
+            return web.json_response({'success': True})
+        else:
+            return web.Response(status=404, text="Message not found")
+    except (ValueError, json.JSONDecodeError):
+        return web.Response(status=400, text="Invalid Request")
+
 # API endpoint to add a new message to a chat.
 # It gets the new message from the request, calls the grok API to get a response,
 # saves the new message and response to the chat file, and returns the response to the frontend.
@@ -79,6 +95,7 @@ app.add_routes([
     web.get('/api/chats/{chat_name}', get_chat_history),
     web.post('/api/chats/{chat_name}', add_message),
     web.post('/api/messages/{message_id}/like', like_message),
+    web.put('/api/messages/{message_id}', update_message),
 ])
 
 if __name__ == '__main__':

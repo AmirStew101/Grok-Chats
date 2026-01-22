@@ -76,6 +76,70 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             };
             header.appendChild(heart);
+
+            // Edit icon
+            const editIcon = document.createElement('span');
+            editIcon.textContent = '✎';
+            editIcon.style.cursor = 'pointer';
+            editIcon.style.marginLeft = '10px';
+            editIcon.title = 'Edit';
+            editIcon.onclick = () => {
+                if (container.querySelector('.edit-container')) return;
+
+                const editContainer = document.createElement('div');
+                editContainer.className = 'edit-container';
+                
+                const textarea = document.createElement('textarea');
+                textarea.value = msg.content;
+                textarea.style.width = '100%';
+                textarea.style.minHeight = '100px';
+                textarea.style.marginTop = '10px';
+                
+                const btnDiv = document.createElement('div');
+                btnDiv.style.marginTop = '5px';
+
+                const saveBtn = document.createElement('button');
+                saveBtn.textContent = 'Save';
+                saveBtn.style.marginLeft = '0';
+                saveBtn.style.marginRight = '10px';
+                
+                const cancelBtn = document.createElement('button');
+                cancelBtn.textContent = 'Cancel';
+                cancelBtn.style.marginLeft = '0';
+
+                btnDiv.appendChild(saveBtn);
+                btnDiv.appendChild(cancelBtn);
+                
+                editContainer.appendChild(textarea);
+                editContainer.appendChild(btnDiv);
+                
+                contentDiv.style.display = 'none';
+                container.appendChild(editContainer);
+
+                cancelBtn.onclick = () => {
+                    container.removeChild(editContainer);
+                    contentDiv.style.display = 'block';
+                };
+
+                saveBtn.onclick = async () => {
+                    try {
+                        const response = await fetch(`/api/messages/${msg.id}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ content: textarea.value })
+                        });
+                        if (response.ok) {
+                            msg.content = textarea.value;
+                            contentDiv.innerHTML = '';
+                            get_split_message(msg.content).forEach(c => contentDiv.appendChild(c));
+                            container.removeChild(editContainer);
+                            contentDiv.style.display = 'block';
+                        }
+                    } catch (err) { console.error(err); }
+                };
+            };
+            header.appendChild(editIcon);
+
             container.appendChild(header);
 
             const contentDiv = document.createElement('div');
