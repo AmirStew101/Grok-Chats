@@ -134,10 +134,31 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!content || !currentChat) {
             return;
         }
+
+        const submitButton = messageForm.querySelector('button');
         const message = {
             role: 'user',
             content: "Tell a revenge story about " + content
         };
+
+        // Disable input and button
+        messageInput.disabled = true;
+        submitButton.disabled = true;
+        messageInput.value = '';
+
+        // Add user message immediately
+        messagesDiv.appendChild(createMessageElement({ role: 'user', content: message.content }));
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
+        // Add placeholder
+        const placeholder = document.createElement('div');
+        placeholder.textContent = 'Asking Grok...';
+        placeholder.style.padding = '10px';
+        placeholder.style.color = '#555';
+        placeholder.style.fontStyle = 'italic';
+        messagesDiv.appendChild(placeholder);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
         try {
             // Send the new message to the server
             const response = await fetch(`/api/chats/${currentChat}`, {
@@ -147,17 +168,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 },
                 body: JSON.stringify(message)
             });
+
+            // Remove placeholder
+            if (placeholder.parentNode) {
+                placeholder.parentNode.removeChild(placeholder);
+            }
+
             if (!response.ok) {
                 throw new Error('Failed to send message');
             }
-            messageInput.value = '';
-            
-            // Add user message immediately (optimistic update not fully possible without ID but we can just render text)
-            // Actually, we can just fetch the response and append both.
-            // But let's follow existing pattern: User msg first, then wait for bot.
-            // Since we use createMessageElement, we can construct a temp object for user.
-            messagesDiv.appendChild(createMessageElement({ role: 'user', content: message.content }));
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
 
             // Wait for the bot's response and add it to the UI
             const botMessage = await response.json();
@@ -165,7 +184,15 @@ document.addEventListener('DOMContentLoaded', () => {
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         } catch (error) {
             console.error(error);
+            if (placeholder.parentNode) {
+                placeholder.parentNode.removeChild(placeholder);
+            }
             // Optionally, display an error message in the UI
+        } finally {
+            // Re-enable input and button
+            messageInput.disabled = false;
+            submitButton.disabled = false;
+            messageInput.focus();
         }
     }
 
