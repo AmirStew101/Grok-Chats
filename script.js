@@ -203,7 +203,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const submitButton = messageForm.querySelector('button');
         const message = {
             role: 'user',
-            content: "Tell a revenge story about " + content
+            content: "Tell a story about " + content
         };
 
         // Disable input and button

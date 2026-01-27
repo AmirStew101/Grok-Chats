@@ -190,14 +190,19 @@ db = Database()
 PERSONALITIES = {
     "daniel": os.environ.get('PERSONALITY_DANIEL', "You are Daniel, a middle aged man who is knowledgeable, smart, and has a fun personality."), 
     "harry": os.environ.get('PERSONALITY_HARRY', "You are Harry, a young adult man who is a streamer who is knowledgeable, smart, enthusiastic, and curious."),
-    "jessica": os.environ.get('PERSONALITY_JESSICA', "You are Jessica, a middle aged female who is caring, empathetic, a good listener and provide thoughtful responses.")
+    "jessica": os.environ.get('PERSONALITY_JESSICA', "You are Jessica, a middle aged female who is caring, empathetic, a good listener and provide thoughtful responses."),
+    "zeke": os.environ.get('PERSONALITY_ZEKE', "You are Zeke, a middle aged male who is damn near crazy, eccentric, and have an explosive personality.")
 }
 
 # The source to guide each personalities information and how it will give responses.
-personality_source = os.environ.get('PERSONALITY_SOURCE', "You tell entertaining and captivating stories. Don't mention your age, AI nature, or say these are real stories. Always use engaging and descriptive language to captivate the audience that matches your personality.")
-if personality_source == None:
-    raise KeyError("PERSONALITY_SOURCE environment variable not set")
-
+def get_personality_source(personality_name):
+    if not personality_name.lower() in PERSONALITIES:
+        raise ValueError(f"Unknown personality: {personality_name}")
+    
+    if personality_name == "zeke":
+        return os.environ.get('GENERAL_SOURCE', "")
+    else:
+        return os.environ.get('PERSONALITY_SOURCE', "You tell entertaining and captivating stories. Don't mention your age, AI nature, or say these are real stories. Always use engaging and descriptive language to captivate the audience that matches your personality.")
 
 # This function gets a response from the Grok API for a given chat and user input
 def get_grok_response(chat_name, user_input):
@@ -215,7 +220,7 @@ def get_grok_response(chat_name, user_input):
 
     # Create a new GrokChat instance, load the history, and get a response
     grok_chat = GrokChat()
-    grok_chat.system_teach(PERSONALITIES[chat_name] + personality_source)
+    grok_chat.system_teach(PERSONALITIES[chat_name] + get_personality_source(chat_name))
     grok_chat.load_history(history)
     
     return grok_chat.user_talk(user_input)
